@@ -9,6 +9,7 @@ import {
 	createExtractAndGenerate,
 	stripLeadingSlash,
 	stripTrailingSlash,
+	toUrl,
 } from "../utils.ts";
 
 const trimRegex = /^trim(?::(top-left|bottom-right))?(?::(\d+))?$/;
@@ -106,9 +107,12 @@ export const generate: URLGenerator<"imagor"> = (src, operations, options) => {
 };
 
 export const extract: URLExtractor<"imagor"> = (url, options) => {
-	const baseURL = options?.baseURL;
+	const mount = options?.baseURL === undefined
+		? splitAbsoluteMount(url)
+		: undefined;
+	const baseURL = options?.baseURL ?? mount?.baseURL;
 
-	const path = normaliseSource(url, baseURL);
+	const path = mount?.path ?? normaliseSource(url, baseURL);
 	if (path === "") return null;
 
 	const segments = path.split("/");
@@ -426,6 +430,24 @@ function toNumber(value: string | number | undefined): number | undefined {
 	if (typeof value === "number") return value;
 	const parsed = Number(value);
 	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+// imagor has no fixed mount, so an absolute URL's mount is the path before its first `unsafe` segment
+function splitAbsoluteMount(
+	url: string | URL,
+): { baseURL: string; path: string } | undefined {
+	const parsedUrl = toUrl(url);
+	// toUrl resolves relative input against the placeholder host `n`
+	if (parsedUrl.hostname === "n") return undefined;
+
+	const segments = parsedUrl.pathname.split("/");
+	const unsafeIndex = segments.indexOf("unsafe");
+	if (unsafeIndex === -1) return undefined;
+
+	return {
+		baseURL: `${parsedUrl.origin}${segments.slice(0, unsafeIndex).join("/")}`,
+		path: `${segments.slice(unsafeIndex).join("/")}${parsedUrl.search}`,
+	};
 }
 
 function normaliseSource(src: string | URL, baseURL?: string): string {

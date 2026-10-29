@@ -174,6 +174,45 @@ Deno.test("imagor extract", async (t) => {
 		assertEquals(result?.options, { baseURL: "/_imagor" });
 	});
 
+	await t.step("takes the mount from an absolute URL", () => {
+		assertEquals(
+			extract(
+				"https://img.example.com/unsafe/450x0/https://unpic.pics/tree.png",
+			),
+			{
+				src: "https://unpic.pics/tree.png",
+				operations: { width: 450 },
+				options: { baseURL: "https://img.example.com" },
+			},
+		);
+		assertEquals(
+			extract("https://img.example.com/images/unsafe/fit-in/800x600/photo.jpg"),
+			{
+				src: "photo.jpg",
+				operations: { width: 800, height: 600, fit: "contain" },
+				options: { baseURL: "https://img.example.com/images" },
+			},
+		);
+	});
+
+	await t.step("splits an absolute URL at its first unsafe segment", () => {
+		assertEquals(
+			extract(
+				"https://img.example.com/unsafe/800x0/https://cdn.example.com/unsafe/photo.jpg",
+			)?.src,
+			"https://cdn.example.com/unsafe/photo.jpg",
+		);
+	});
+
+	await t.step("keeps an unescaped query on an absolute URL's source", () => {
+		assertEquals(
+			extract(
+				"https://img.example.com/unsafe/800x0/https://cdn.example.com/photo.jpg?v=2",
+			)?.src,
+			"https://cdn.example.com/photo.jpg?v=2",
+		);
+	});
+
 	await t.step("returns null for empty input", () => {
 		assertEquals(extract(""), null);
 	});
@@ -277,6 +316,23 @@ Deno.test("imagor transform", async (t) => {
 		assertEquals(
 			transform(existing, { width: 400 }, { baseURL: "/_imagor" }),
 			"/_imagor/unsafe/400x0/filters:quality(80)/photo.jpg",
+		);
+	});
+
+	await t.step("keeps the origin and mount of an absolute URL", () => {
+		assertEquals(
+			transform(
+				"https://img.example.com/images/unsafe/450x0/filters:quality(80)/https://unpic.pics/tree.png",
+				{ width: 96 },
+			),
+			"https://img.example.com/images/unsafe/96x0/filters:quality(80)/https://unpic.pics/tree.png",
+		);
+	});
+
+	await t.step("treats an absolute URL without unsafe as a source", () => {
+		assertEquals(
+			transform("https://cdn.example.com/photo.jpg", { width: 800 }),
+			"unsafe/800x0/https://cdn.example.com/photo.jpg",
 		);
 	});
 });
